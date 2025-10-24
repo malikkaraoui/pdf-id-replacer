@@ -76,7 +76,7 @@ Le script analysera les PDF présents dans le dossier PDF/, puis créera les ver
 
 ### 🧾 Personnalisation
 
-Dans le script replace_patient_id.py, ces lignes définissent les chemins (ex pour MacOS):
+Dans le script replace_patient_id.py, ces lignes définissent les chemins :
 
 EXCEL_PATH = r"/Users/malik/Documents/PDF modif/patients.xlsx"
 PDF_FOLDER = r"/Users/malik/Documents/PDF modif/PDF"
