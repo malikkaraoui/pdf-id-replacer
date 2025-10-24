@@ -1,6 +1,12 @@
 # 🧩 PDF ID Replacer
 
-Script **Python** permettant de remplacer automatiquement les numéros patients (ex: `10002530`) dans des rapports PDF par leur **Nom** et **Prénom**, à partir d’un fichier **Excel** de correspondance.
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Dependencies](https://img.shields.io/badge/install-%20pip%20install%20--r%20requirements.txt-success)
+![By Malik Karaoui](https://img.shields.io/badge/By-Malik%20Karaoui-10B981)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+
+Script Python permettant de remplacer automatiquement les numéros patients (ex: `10002530`) dans des rapports PDF par leur **Nom** et **Prénom**, à partir d’un fichier **Excel** de correspondance.
 
 ---
 
