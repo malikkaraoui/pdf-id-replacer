@@ -1,0 +1,22 @@
+# === Dépendances pour PDF ID Replacer ===
+# Script : replace_patient_id.py
+# Auteur : Malik Karaoui
+# Description : Remplace automatiquement les ID patients dans des rapports PDF
+#               par Nom et Prénom à partir d'un fichier Excel.
+#               Compatible macOS, Windows et Linux.
+
+# Extraction du texte et positions depuis PDF
+pdfplumber==0.11.3
+
+# Génération et édition de calques PDF
+reportlab==4.2.2
+
+# Manipulation structurelle des PDF (fusion, overlay, écriture)
+pypdf==5.1.0
+
+# Gestion et traitement des fichiers Excel / DataFrames
+pandas==2.2.3
+openpyxl==3.1.5
+
+# Optionnel (utile pour performances ou compatibilité typographique)
+Pillow==10.4.0
