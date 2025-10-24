@@ -6,7 +6,7 @@ Script **Python** permettant de remplacer automatiquement les numéros patients 
 
 ## 🚀 Fonctionnalités
 
-✅ Remplace les ID patients (comme `1000-2530` ou `1000 2530`) par le **nom et prénom**  
+✅ Remplace les ID patients (comme `1000-2530` ou `1000 2530` ou `10002530`) par le **nom et prénom**  
 ✅ Masque automatiquement les anciens identifiants (zone blanche propre)  
 ✅ Gère les fichiers **PDF multipages**  
 ✅ Lecture automatique d’un fichier **Excel** (noms / prénoms / ID unique)  
