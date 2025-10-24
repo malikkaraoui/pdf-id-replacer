@@ -32,13 +32,15 @@ Script Python permettant de remplacer automatiquement les numéros patients (ex:
 
 ## 📂 Structure du projet
 
-PDF modif/
+```PDF modif/
 ├── replace_patient_id.py ← Script principal
 ├── patients.xlsx ← Fichier Excel avec correspondance
-└── PDF/
-├── Exemple-1.pdf
-├── Exemple-2.pdf
-└── ...
+├── PDF/ ← Dossier contenant les PDF à traiter
+│ ├── Exemple-1.pdf
+│ ├── Exemple-2.pdf
+│ └── ...
+```
+
 
 ---
 
