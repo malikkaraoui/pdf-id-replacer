@@ -99,8 +99,11 @@ soit modifier ces deux chemins pour correspondre à son environnement.
 ### 💡 Astuce
 
 Pour vérifier rapidement si tout fonctionne :
+
 Placer un seul fichier PDF dans PDF/
+
 Lancer le script
+
 Vérifier la création du fichier *-NEW.pdf avec les champs remplacés
 
 ---
