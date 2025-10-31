@@ -228,45 +228,39 @@ def anonymize_pdf(pdf_path, nom, prenom, output_path):
     with open(output_path, "wb") as f:
         writer.write(f)
 
+def run_replace_from_gui(excel_path, pdf_path, output_path):
+    """
+    Fonction appelée depuis l'interface graphique.
+    Remplace le numéro patient par Nom + Prénom.
+    """
+    SHEET_NAME = "feuille1"
+    COL_NUMERO = "ID_unique"
+    COL_NOM = "Nom"
+    COL_PRENOM = "Prénom"
 
-def main():
-    """🚀 Point d'entrée principal : lecture Excel + traitement des PDF."""
-    df = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_NAME)
+    df = pd.read_excel(excel_path, sheet_name=SHEET_NAME)
     df.columns = [col.strip() for col in df.columns]
     df[COL_NUMERO] = df[COL_NUMERO].astype(str).str.replace(r"[\s\-]", "", regex=True)
 
-    print(f"Excel détecté et chargé ({len(df)} entrées).")
-    pdf_files = [f for f in os.listdir(PDF_FOLDER) if f.lower().endswith(".pdf")]
+    with pdfplumber.open(pdf_path) as pdf:
+        text = "".join(page.extract_text() or "" for page in pdf.pages)
+    numero = extract_patient_number(text)
 
-    for pdf_name in pdf_files:
-        pdf_path = os.path.join(PDF_FOLDER, pdf_name)
-        print(f"\nAnalyse du fichier PDF : {pdf_name}")
+    if not numero:
+        raise ValueError("Aucun numéro patient trouvé dans le PDF")
 
-        with pdfplumber.open(pdf_path) as pdf:
-            text = "".join(page.extract_text() or "" for page in pdf.pages)
+    row = df[df[COL_NUMERO] == numero]
+    if row.empty:
+        raise ValueError(f"Pas de correspondance trouvée pour {numero}")
 
-        numero = extract_patient_number(text)
-        if not numero:
-            print("⚠️ Aucun numéro patient trouvé.")
-            continue
+    nom = str(row[COL_NOM].values[0])
+    prenom = str(row[COL_PRENOM].values[0])
+    print(f"✅ {numero} → {nom} {prenom}")
 
-        row = df[df[COL_NUMERO] == numero]
-        if row.empty:
-            print(f"⚠️ Pas de correspondance trouvée pour {numero}")
-            continue
-
-        nom = str(row[COL_NOM].values[0])
-        prenom = str(row[COL_PRENOM].values[0])
-        print(f"✅ Correspondance : {numero} → {nom} {prenom}")
-
-        base_name, ext = os.path.splitext(pdf_name)
-        output_pdf = os.path.join(PDF_FOLDER, f"{base_name}-NEW{ext}")
-
-        anonymize_pdf(pdf_path, nom, prenom, output_pdf)
-        print(f"💾 Fichier modifié enregistré : {output_pdf}")
-
-    print("\n🎉 Traitement terminé avec succès !")
+    anonymize_pdf(pdf_path, nom, prenom, output_path)
+    return f"✅ Fichier modifié enregistré : {output_path}"
 
 
+# --- si lancé en direct depuis le terminal, on garde l’ancien comportement ---
 if __name__ == "__main__":
-    main()
+    print("Ce script est destiné à être utilisé via app_gui.py")
