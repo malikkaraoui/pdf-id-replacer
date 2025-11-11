@@ -20,20 +20,21 @@ from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from pypdf import PdfReader, PdfWriter
+from reportlab.lib.utils import ImageReader  # NOUVEAU - Pour gestion des images (Traitement local 3)
 
 # ============================
-# ==== PARAMÈTRES À MODIFIER ====
+# ==== IMPORT DES PARAMÈTRES ====
+# ============================
+from parametres import *
+
+# ============================
+# ==== CHEMINS PAR DÉFAUT ====
 # ============================
 
-EXCEL_PATH = r"/Users/malik/Documents/PDF modif/patients.xlsx"  # Chemin vers le fichier Excel
-SHEET_NAME = "feuille1"  # Nom de la feuille
-COL_NUMERO = "ID_unique"  # Nom de la colonne des IDs
-COL_NOM = "Nom"           # Colonne du nom
-COL_PRENOM = "Prénom"     # Colonne du prénom
-
-PDF_FOLDER = r"/Users/Malik/Documents/PDF modif/PDF"  # Dossier contenant les PDF
-REDACT_COLOR = (1, 1, 1)  # Couleur du masque (blanc)
-HEADER_Y_THRESHOLD = 0.25  # Seuil (en %) de hauteur de page considérée comme "entête"
+# Construction des chemins à partir du répertoire du script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+EXCEL_PATH = os.path.join(SCRIPT_DIR, EXCEL_FILE)  # Chemin vers le fichier Excel
+PDF_FOLDER_PATH = os.path.join(SCRIPT_DIR, PDF_FOLDER)  # Dossier contenant les PDF
 
 # ============================
 # ==== FIN DES PARAMÈTRES ====
@@ -176,15 +177,15 @@ def create_overlay(page_width, page_height, items):
         w, h = x1 - x0, y1 - y0
 
         # 🩶 Masque blanc (efface l'ancien identifiant)
-        c.setFillColorRGB(*REDACT_COLOR)
+        c.setFillColorRGB(MASK_COLOR_R, MASK_COLOR_G, MASK_COLOR_B)
         c.rect(x0, y0, w, h, fill=1, stroke=0)
 
         # --- Choix de la police ---
-        font_name = "Helvetica-Bold" if is_header else "Helvetica"
+        font_name = "Helvetica-Bold" if is_header else REPLACEMENT_FONT_NAME
 
         # --- Ajustement automatique de la taille ---
         base_size = max(7, int(h * 0.8))
-        c.setFillColorRGB(0, 0, 0)
+        c.setFillColorRGB(TEXT_COLOR_R, TEXT_COLOR_G, TEXT_COLOR_B)
         size = base_size
         max_width = w * 0.95
         text_width = pdfmetrics.stringWidth(replacement, font_name, size)
@@ -209,8 +210,127 @@ def create_overlay(page_width, page_height, items):
     return packet
 
 
-def anonymize_pdf(pdf_path, nom, prenom, output_path):
-    """🧾 Ouvre le PDF, applique le calque, et enregistre la version modifiée."""
+def create_medilec_overlay(page_width, page_height, docteur_nom):
+    """
+    🏥 TRAITEMENT LOCAL 3 - Génère un calque avec logo Medilec + nom du docteur
+    
+    POSITIONS INDÉPENDANTES:
+    - Le docteur a sa propre position (X, Y)
+    - Le logo a sa propre position (X, Y)
+    - Ils ne sont plus liés l'un à l'autre
+    
+    Args:
+        page_width: Largeur de la page PDF
+        page_height: Hauteur de la page PDF  
+        docteur_nom: Nom du docteur à afficher
+        
+    Returns:
+        BytesIO: Calque PDF avec logo et docteur
+    """
+    packet = BytesIO()
+    c = canvas.Canvas(packet, pagesize=(page_width, page_height))
+    
+    # === ZONE DE MASQUAGE (Rectangle rose) ===
+    zone_x = page_width * ZONE_POSITION_X_RATIO
+    zone_y = page_height - ZONE_POSITION_Y_OFFSET - ZONE_HEIGHT
+    zone_width = page_width - zone_x - ZONE_MARGE_DROITE
+    zone_height = ZONE_HEIGHT
+    
+    # Masquage blanc du rectangle rose
+    print(f"🎯 Rectangle rose: x={zone_x:.1f}, y={zone_y:.1f}, w={zone_width:.1f}, h={zone_height}")
+    c.setFillColorRGB(MASK_COLOR_R, MASK_COLOR_G, MASK_COLOR_B)
+    c.rect(zone_x, zone_y, zone_width, zone_height, fill=1, stroke=0)
+    
+    # === POSITION INDÉPENDANTE DU DOCTEUR ===
+    docteur_x = page_width * DOCTEUR_POSITION_X_RATIO + DOCTEUR_MARGE_GAUCHE
+    docteur_y = page_height - DOCTEUR_POSITION_Y_OFFSET
+
+    # Masque local derrière le texte docteur pour effacer l'ancien contenu (rose transparent)
+    mask_x = max(0, docteur_x - DOCTEUR_MASK_PADDING_X)
+    mask_y = max(0, docteur_y - DOCTEUR_MASK_PADDING_Y)
+    mask_w = page_width - mask_x - ZONE_MARGE_DROITE
+    mask_h = DOCTEUR_FONT_SIZE + 2 * DOCTEUR_MASK_PADDING_Y
+    c.saveState()
+    c.setFillColorRGB(DOCTEUR_MASK_COLOR_R, DOCTEUR_MASK_COLOR_G, DOCTEUR_MASK_COLOR_B)
+    c.setFillAlpha(DOCTEUR_MASK_COLOR_A)
+    c.rect(mask_x, mask_y, mask_w, mask_h, fill=1, stroke=0)
+    c.restoreState()
+    print(f"🟪 Masque docteur (rose alpha) : x={mask_x:.1f}, y={mask_y:.1f}, w={mask_w:.1f}, h={mask_h:.1f}")
+    
+    # === POSITION INDÉPENDANTE DU LOGO (avec conservation des proportions) ===
+    # Détermine la taille du logo à l'intérieur d'un cadre (max largeur/hauteur)
+    logo_zone_start_x = page_width * LOGO_POSITION_X_RATIO
+    logo_zone_width = page_width - logo_zone_start_x - ZONE_MARGE_DROITE
+
+    # Limites de taille autorisées pour le logo (supporte agrandissement)
+    max_logo_w = min(LOGO_WIDTH * LOGO_SCALE, logo_zone_width)
+    max_logo_h = LOGO_HEIGHT_DANS_RECT * LOGO_SCALE
+
+    # Récupérer la taille d'origine du logo et calculer un redimensionnement qui conserve le ratio
+    try:
+        _img = ImageReader(LOGO_PATH)
+        orig_w, orig_h = _img.getSize()
+        # Eviter division par zéro
+        if orig_w <= 0 or orig_h <= 0:
+            raise ValueError("Logo size invalid")
+        scale = min(max_logo_w / orig_w, max_logo_h / orig_h)
+        logo_width_dans_rect = orig_w * scale
+        logo_height_dans_rect = orig_h * scale
+    except Exception:
+        # Fallback: utilise les dimensions max si la lecture échoue
+        logo_width_dans_rect = max_logo_w
+        logo_height_dans_rect = max_logo_h
+
+    # Logo centré horizontalement dans sa zone, même si sa largeur change
+    logo_x = logo_zone_start_x + (logo_zone_width - logo_width_dans_rect) / 2
+    logo_y = page_height - LOGO_POSITION_Y_OFFSET
+    
+    # === APPEL DES FONCTIONS SÉPARÉES (positions indépendantes) ===
+    add_docteur_text(c, docteur_x, docteur_y, docteur_nom)
+    add_medilec_logo(c, logo_x, logo_y, logo_width_dans_rect, logo_height_dans_rect)
+    
+    c.save()
+    packet.seek(0)
+    return packet
+
+
+def add_docteur_text(c, docteur_x, docteur_y, docteur_nom):
+    """
+    👨‍⚕️ FONCTION SÉPARÉE - Ajoute le texte du docteur sur le calque
+    
+    Args:
+        c: Canvas reportlab
+        docteur_x: Position X du texte
+        docteur_y: Position Y du texte
+        docteur_nom: Nom du docteur à afficher
+    """
+    if docteur_nom and str(docteur_nom).strip() and str(docteur_nom).strip().lower() != 'nan':
+        c.setFillColorRGB(TEXT_COLOR_R, TEXT_COLOR_G, TEXT_COLOR_B)  # Texte noir
+        c.setFont(DOCTEUR_FONT_NAME, DOCTEUR_FONT_SIZE)  # Police du docteur
+        docteur_text = f"{DOCTEUR_PREFIX}{str(docteur_nom).strip()}"
+        c.drawString(docteur_x, docteur_y, docteur_text)
+        print(f"👨‍⚕️ Docteur: '{docteur_text}' à x={docteur_x:.1f}, y={docteur_y:.1f}")
+
+
+def add_medilec_logo(c, logo_x, logo_y, logo_width, logo_height):
+    """
+    🏥 FONCTION SÉPARÉE - Ajoute le logo Medilec sur le calque
+    
+    Args:
+        c: Canvas reportlab
+        logo_x: Position X du logo
+        logo_y: Position Y du logo
+        logo_width: Largeur du logo
+        logo_height: Hauteur du logo
+    """
+    img_reader = ImageReader(LOGO_PATH)
+    # preserveAspectRatio=True pour éviter l'écrasement du logo
+    c.drawImage(img_reader, logo_x, logo_y, width=logo_width, height=logo_height, preserveAspectRatio=True)
+    print(f"📋 Logo: x={logo_x:.1f}, y={logo_y:.1f} (taille: {logo_width:.0f}x{logo_height:.0f}) — proportions conservées")
+
+
+def anonymize_pdf(pdf_path, nom, prenom, docteur_nom, output_path):
+    """🧾 Ouvre le PDF, applique les calques (remplacement + logo), et enregistre la version modifiée."""
     full_name = f"{nom} {prenom}"
     reader = PdfReader(pdf_path)
     writer = PdfWriter()
@@ -218,29 +338,36 @@ def anonymize_pdf(pdf_path, nom, prenom, output_path):
     with pdfplumber.open(pdf_path) as pdf:
         for i, page in enumerate(pdf.pages):
             base_page = reader.pages[i]
+            
+            # === TRAITEMENT LOCAL 1 & 2 - Remplacement des numéros patients (CONSERVÉ) ===
             items = assign_replacements_for_page(page, full_name, nom, prenom)
             if items:
                 overlay_stream = create_overlay(page.width, page.height, items)
                 overlay_pdf = PdfReader(overlay_stream)
                 base_page.merge_page(overlay_pdf.pages[0])
+            
+            # === TRAITEMENT LOCAL 3 - Ajout logo Medilec + docteur (NOUVEAU) ===
+            # Seulement sur la première page pour éviter la redondance
+            if i == 0:
+                medilec_stream = create_medilec_overlay(page.width, page.height, docteur_nom)
+                medilec_pdf = PdfReader(medilec_stream)
+                base_page.merge_page(medilec_pdf.pages[0])
+                print(f"🏥 Traitement local 3 appliqué: Logo + Dr. {docteur_nom}")
+            
             writer.add_page(base_page)
 
     with open(output_path, "wb") as f:
         writer.write(f)
 
-def run_replace_from_gui(excel_path, pdf_path, output_path):
+def run_replace_from_gui(excel_path, pdf_path, output_path=None):
     """
     Fonction appelée depuis l'interface graphique.
-    Remplace le numéro patient par Nom + Prénom.
+    Remplace le numéro patient par Nom + Prénom + ajoute logo Medilec + docteur.
+    Si output_path n'est pas fourni, utilise le nom d'origine avec OUTPUT_SUFFIX.
     """
-    SHEET_NAME = "feuille1"
-    COL_NUMERO = "ID_unique"
-    COL_NOM = "Nom"
-    COL_PRENOM = "Prénom"
-
-    df = pd.read_excel(excel_path, sheet_name=SHEET_NAME)
+    df = pd.read_excel(excel_path, sheet_name=EXCEL_SHEET_NAME)
     df.columns = [col.strip() for col in df.columns]
-    df[COL_NUMERO] = df[COL_NUMERO].astype(str).str.replace(r"[\s\-]", "", regex=True)
+    df[COLONNE_ID] = df[COLONNE_ID].astype(str).str.replace(r"[\s\-]", "", regex=True)
 
     with pdfplumber.open(pdf_path) as pdf:
         text = "".join(page.extract_text() or "" for page in pdf.pages)
@@ -249,16 +376,128 @@ def run_replace_from_gui(excel_path, pdf_path, output_path):
     if not numero:
         raise ValueError("Aucun numéro patient trouvé dans le PDF")
 
-    row = df[df[COL_NUMERO] == numero]
+    row = df[df[COLONNE_ID] == numero]
     if row.empty:
         raise ValueError(f"Pas de correspondance trouvée pour {numero}")
 
-    nom = str(row[COL_NOM].values[0])
-    prenom = str(row[COL_PRENOM].values[0])
+    nom = str(row[COLONNE_NOM].values[0])
+    prenom = str(row[COLONNE_PRENOM].values[0])
+    
+    # === NOUVEAU - Récupération du docteur (Traitement local 3) ===
+    docteur_nom = None
+    if COLONNE_DOCTEUR in df.columns:
+        docteur_val = row[COLONNE_DOCTEUR].values[0] if not row[COLONNE_DOCTEUR].empty else None
+        if docteur_val and str(docteur_val).strip() and str(docteur_val).strip().lower() != 'nan':
+            docteur_nom = str(docteur_val).strip()
+    
     print(f"✅ {numero} → {nom} {prenom}")
+    if docteur_nom:
+        print(f"🏥 Docteur: {docteur_nom}")
+    else:
+        print("⚠️ Pas de docteur assigné pour ce patient")
 
-    anonymize_pdf(pdf_path, nom, prenom, output_path)
+    # === Génération automatique du nom de fichier avec suffixe ===
+    if output_path is None:
+        # Extraire le dossier et le nom de base du PDF d'entrée
+        pdf_dir = os.path.dirname(pdf_path)
+        pdf_basename = os.path.basename(pdf_path)
+        # Séparer nom et extension
+        name_without_ext, ext = os.path.splitext(pdf_basename)
+        # Ajouter le suffixe
+        output_path = os.path.join(pdf_dir, f"{name_without_ext}{OUTPUT_SUFFIX}{ext}")
+
+    # Appel de la fonction modifiée avec le paramètre docteur
+    anonymize_pdf(pdf_path, nom, prenom, docteur_nom, output_path)
     return f"✅ Fichier modifié enregistré : {output_path}"
+
+
+def process_all_pdfs_in_folder(excel_path, pdf_folder):
+    """
+    📁 Traite automatiquement tous les fichiers PDF d'un dossier.
+    
+    Args:
+        excel_path: Chemin vers le fichier Excel contenant les données patients
+        pdf_folder: Chemin vers le dossier contenant les PDFs à traiter
+        
+    Returns:
+        dict: Résumé du traitement (succès, erreurs)
+    """
+    print(f"📂 Traitement du dossier: {pdf_folder}")
+    print(f"📊 Fichier Excel: {excel_path}")
+    print("=" * 80)
+    
+    # Vérifier que le dossier existe
+    if not os.path.exists(pdf_folder):
+        raise ValueError(f"Le dossier {pdf_folder} n'existe pas")
+    
+    if not os.path.exists(excel_path):
+        raise ValueError(f"Le fichier Excel {excel_path} n'existe pas")
+    
+    # Récupérer tous les fichiers PDF du dossier (sauf ceux déjà anonymisés)
+    pdf_files = [
+        f for f in os.listdir(pdf_folder)
+        if f.lower().endswith('.pdf') and OUTPUT_SUFFIX not in f
+    ]
+    
+    if not pdf_files:
+        print("⚠️ Aucun fichier PDF à traiter dans ce dossier")
+        return {"success": 0, "errors": 0, "skipped": 0}
+    
+    print(f"📋 {len(pdf_files)} fichier(s) PDF trouvé(s)\n")
+    
+    success_count = 0
+    error_count = 0
+    results = []
+    
+    for i, pdf_file in enumerate(pdf_files, 1):
+        pdf_path = os.path.join(pdf_folder, pdf_file)
+        print(f"\n[{i}/{len(pdf_files)}] 🔄 Traitement de: {pdf_file}")
+        print("-" * 80)
+        
+        try:
+            result = run_replace_from_gui(excel_path, pdf_path)
+            print(result)
+            success_count += 1
+            results.append({"file": pdf_file, "status": "success"})
+        except Exception as e:
+            print(f"❌ Erreur lors du traitement de {pdf_file}: {e}")
+            error_count += 1
+            results.append({"file": pdf_file, "status": "error", "error": str(e)})
+    
+    # Résumé final
+    print("\n" + "=" * 80)
+    print("📊 RÉSUMÉ DU TRAITEMENT")
+    print("=" * 80)
+    print(f"✅ Fichiers traités avec succès: {success_count}")
+    print(f"❌ Erreurs: {error_count}")
+    print(f"📁 Total: {len(pdf_files)}")
+    
+    if error_count > 0:
+        print("\n⚠️ Fichiers en erreur:")
+        for r in results:
+            if r["status"] == "error":
+                print(f"  - {r['file']}: {r.get('error', 'Erreur inconnue')}")
+    
+    return {
+        "success": success_count,
+        "errors": error_count,
+        "total": len(pdf_files),
+        "details": results
+    }
+
+
+# --- si lancé en direct depuis le terminal, on garde l'ancien comportement ---
+if __name__ == "__main__":
+    print("🏥 TRAITEMENT AUTOMATIQUE DE TOUS LES PDFs")
+    print("=" * 80)
+    
+    # Utiliser les chemins par défaut définis en haut du fichier
+    try:
+        process_all_pdfs_in_folder(EXCEL_PATH, PDF_FOLDER_PATH)
+    except Exception as e:
+        print(f"❌ Erreur fatale: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # --- si lancé en direct depuis le terminal, on garde l’ancien comportement ---
