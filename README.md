@@ -25,12 +25,42 @@ Script Python permettant de remplacer automatiquement les numéros patients (ex:
 
 ## 🧠 Exemple de fonctionnement
 
+### Avant traitement
+```
+Fichier PDF original:
+┌─────────────────────────────────────┐
+│ Rapport Médical                     │
+│                                     │
+│ Nom : 10002530                      │
+│ Prénom : 10002530                   │
+│                                     │
+│ Patient : 10002530 10002530         │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+### Après traitement
+```
+Fichier PDF anonymisé:
+┌─────────────────────────────────────┐
+│ Rapport Médical    [Logo Medilec]  │
+│                    Docteur : Paulo  │
+│ Nom : Simon                         │
+│ Prénom : Ethan                      │
+│                                     │
+│ Patient : Simon Ethan               │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+### Tableau récapitulatif
+
 | Avant | Après |
 |-------|-------|
 | `10002530 10002530` | `Simon Ethan` |
 | `Nom : 10002530` | `Nom : Simon` |
 | `Prénom : 10002530` | `Prénom : Ethan` |
-| *(zone vide)* | `Docteur : Paulo` + Logo Medilec |
+| *(zone vide en haut à droite)* | Logo Medilec + `Docteur : Paulo` |
 
 ---
 
